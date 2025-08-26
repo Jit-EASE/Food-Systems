@@ -48,8 +48,8 @@ h1,h2,h3,h4 {font-family:"Segoe UI","Roboto",sans-serif;color:#e6edf3;border-bot
 # ----------------- App Header -----------------
 st.markdown(f"""
 <div class="hero">
-  <div class="title">Sensor‑Centric Econometric Suite for Agri‑Food Systems</div>
-  <div class="sub">Agri‑food sensor‑centric panel econometrics: SPC & drift, uncertainty, trade‑offs, ordered logit, regularization, and agent‑assisted predictions.</div>
+  <div class="title">Sensor-Centric Econometric Suite for Agri-Food Systems</div>
+  <div class="sub">Agri-food sensor-centric panel econometrics: SPC & drift, uncertainty, trade-offs, ordered logit, regularization, and agent-assisted predictions.</div>
   <div class="ver">Version: {APP_VERSION}</div>
 </div>
 """, unsafe_allow_html=True)
@@ -74,7 +74,6 @@ def psi_score(ref: pd.Series, cur: pd.Series, bins: int = 10) -> float:
     return float(np.sum((r - c) * np.log(r / c)))
 
 # Diagnostics helpers
-
 def calibration_by_decile(y: pd.Series, yhat: pd.Series, q: int = 10) -> pd.DataFrame:
     df = pd.DataFrame({"y": y, "yhat": yhat}).sort_values("yhat")
     df["bin"] = pd.qcut(df["yhat"], q=q, duplicates="drop")
@@ -87,7 +86,6 @@ def residual_var_heatmap(zdf: pd.DataFrame) -> pd.DataFrame:
     )
 
 # Sensitivity / contributions
-
 def local_elasticities(model, row: pd.DataFrame, features_z):
     yhat = float(model.predict(row)[0])
     rows = []
@@ -116,7 +114,6 @@ def contribution_waterfall(model, row: pd.DataFrame, features_z):
     return dfc, base0
 
 # Trade-offs
-
 def targeter(model, row: pd.DataFrame, features_z, target_y: float, bounds: dict, steps: int = 150, lr: float = 0.15):
     x = row[features_z].iloc[0].copy()
     for _ in range(steps):
@@ -138,7 +135,6 @@ def cost_proxy(row: pd.Series) -> float:
     return 1.0 + 0.02*row["brix"] + 0.0003*row["salt_ppm"] + 0.0005*max(row["work_chew"],0) + 0.02*abs(row["odor_pc1"])
 
 def pareto_front(df: pd.DataFrame, liking_col="y_hat", sodium_col="salt_ppm", cost_col="cost") -> pd.DataFrame:
-    # keep points that are not dominated by any other (higher liking, lower sodium, lower cost dominate)
     pts = df[[liking_col, sodium_col, cost_col]].to_numpy()
     n = len(pts)
     keep = np.ones(n, dtype=bool)
@@ -232,13 +228,13 @@ def agent_v_predict(row: pd.Series) -> dict:
 
 # ----------------- Sidebar -----------------
 st.sidebar.header("Controls")
-n_products = st.sidebar.slider("Products", 4, 20, 8)
-n_batches = st.sidebar.slider("Batches/product", 2, 6, 3)
-n_panel = st.sidebar.slider("Panelists", 8, 40, 24)
-n_sessions = st.sidebar.slider("Sessions", 2, 8, 4)
-tpc = st.sidebar.slider("Tastings/combo", 1, 5, 3)
-noise = st.sidebar.slider("Noise SD", 0.2, 1.5, 0.8)
-seed = st.sidebar.number_input("Seed", value=42)
+n_products = st.sidebar.slider("Products", 4, 20, 8, key="ctl_products")
+n_batches = st.sidebar.slider("Batches/product", 2, 6, 3, key="ctl_batches")
+n_panel = st.sidebar.slider("Panelists", 8, 40, 24, key="ctl_panel")
+n_sessions = st.sidebar.slider("Sessions", 2, 8, 4, key="ctl_sessions")
+tpc = st.sidebar.slider("Tastings/combo", 1, 5, 3, key="ctl_tpc")
+noise = st.sidebar.slider("Noise SD", 0.2, 1.5, 0.8, key="ctl_noise")
+seed = st.sidebar.number_input("Seed", value=42, key="ctl_seed")
 
 df = simulate_sensory_data(n_products, n_batches, n_panel, n_sessions, tpc, seed, noise)
 mdl, zdf, z_features, formula = fit_ols_fe(df)
@@ -298,7 +294,7 @@ with tabs[0]:
 # ---- Uncertainty ----
 with tabs[1]:
     st.subheader("Uncertainty (Bootstrap)")
-    feat = st.selectbox("Slice feature", FEATURES, index=0)
+    feat = st.selectbox("Slice feature", FEATURES, index=0, key="unc_slice_feature")
     q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
     grid = np.linspace(q05, q95, 60)
     med = df[FEATURES].median()
@@ -340,13 +336,11 @@ with tabs[2]:
         fig.add_hline(y=0)
         st.plotly_chart(_crosshair(fig), use_container_width=True)
     with col2:
-        # Calibration curve by deciles
         cal_df = calibration_by_decile(zdf["overall_liking"], zdf["y_hat"], q=10)
         fig_cal = px.line(cal_df, x="yhat_mean", y="y_mean", markers=True, labels={"yhat_mean":"Mean ŷ (bin)","y_mean":"Mean y"})
         fig_cal.add_trace(go.Scatter(x=[1,9], y=[1,9], mode="lines", name="Ideal"))
         st.plotly_chart(_crosshair(fig_cal), use_container_width=True)
 
-    # QQ plot
     r = np.sort(zdf["resid"].values)
     n = len(r)
     probs = (np.arange(1, n+1)-0.5)/n
@@ -357,7 +351,6 @@ with tabs[2]:
     figqq.add_trace(go.Scatter(x=[-lim, lim], y=[-lim, lim], mode="lines", name="Ideal"))
     st.plotly_chart(_crosshair(figqq), use_container_width=True)
 
-    # Residual variance heatmap (batch x session)
     hv = residual_var_heatmap(zdf)
     pivot = hv.pivot(index="session", columns="batch", values="resid_var")
     fig_hm = px.imshow(pivot, aspect="auto", color_continuous_scale="Blues", origin="lower", labels=dict(color="Var(resid)"))
@@ -370,7 +363,7 @@ with tabs[2]:
 # ---- Sensitivity ----
 with tabs[3]:
     st.subheader("Sensitivity & Contributions")
-    idx = st.number_input("Row index", min_value=0, max_value=len(zdf)-1, value=0)
+    idx = st.number_input("Row index", min_value=0, max_value=len(zdf)-1, value=0, key="sens_row_idx")
     row = zdf.iloc[[int(idx)]][["panelist","batch","session"] + z_features]
 
     tor = tornado_effects(mdl, row, z_features)
@@ -393,7 +386,7 @@ with tabs[3]:
 # ---- SPC & Drift ----
 with tabs[4]:
     st.subheader("SPC & Drift")
-    feat = st.selectbox("SPC feature (batch means)", ["dE","odor_pc1","spectral_centroid","brix","salt_ppm"], index=0)
+    feat = st.selectbox("SPC feature (batch means)", ["dE","odor_pc1","spectral_centroid","brix","salt_ppm"], index=0, key="spc_batch_feature")
     s = df.groupby("batch")[feat].mean()
     mu = s.mean(); sd = s.std(ddof=0)
     ucl = mu + 3*sd; lcl = mu - 3*sd
@@ -405,7 +398,6 @@ with tabs[4]:
     fig.update_layout(title=f"Control Chart — {feat} (batch means)")
     st.plotly_chart(_crosshair(fig), use_container_width=True)
 
-    # PSI drift vs baseline (first 20%)
     cut = max(1, len(df)//5)
     psi_val_feat = psi_score(df[feat].iloc[:cut], df[feat].iloc[cut:])
     st.info(f"PSI ({feat}) using 20% split: {psi_val_feat:.3f}  (heuristic: <0.1 low • 0.1–0.25 moderate • >0.25 high)")
@@ -415,9 +407,9 @@ with tabs[5]:
     st.subheader("Trade-offs: Targeting & Pareto")
     tcol1, tcol2 = st.columns([1,2])
     with tcol1:
-        idx_t = st.number_input("Row index (targeter)", min_value=0, max_value=len(zdf)-1, value=0)
-        target_y = st.slider("Target liking", 1.0, 9.0, 7.5, 0.1)
-        bound_z = st.slider("Feature bound |z| ≤", 0.5, 3.0, 2.0, 0.1)
+        idx_t = st.number_input("Row index (targeter)", min_value=0, max_value=len(zdf)-1, value=0, key="trade_row_idx")
+        target_y = st.slider("Target liking", 1.0, 9.0, 7.5, 0.1, key="trade_target_y")
+        bound_z = st.slider("Feature bound |z| ≤", 0.5, 3.0, 2.0, 0.1, key="trade_bound_z")
         row_t = zdf.iloc[[int(idx_t)]][["panelist","batch","session"] + z_features]
         bounds = {f: (-float(bound_z), float(bound_z)) for f in FEATURES}
         sol, yfinal = targeter(mdl, row_t, z_features, float(target_y), bounds)
@@ -438,22 +430,16 @@ with tabs[5]:
 with tabs[6]:
     st.subheader("Ordered Logit (1–9)")
 
-    # Outcomes: integers 1..9 (no constant anywhere)
     y_ord = zdf["overall_liking"].round().clip(1, 9).astype(int)
-
-    # Guard: need at least 2 distinct classes
     uniq = np.unique(y_ord.values)
     if uniq.size < 2:
         st.warning("Ordered logit skipped: only one rating class in the data.")
     else:
-        # Explanatory vars: standardized features ONLY (no constant)
         X_ord = zdf[[f+"_z" for f in FEATURES]].to_numpy()
-
         mod = OrderedModel(y_ord, X_ord, distr="logit")
         try:
             res = mod.fit(method="bfgs", disp=False)
 
-            # Null model (cutpoints only): zero columns; if that fails, fall back to NaN pseudo-R²
             try:
                 X_null = np.empty((len(y_ord), 0))
                 res0 = OrderedModel(y_ord, X_null, distr="logit").fit(method="bfgs", disp=False)
@@ -461,28 +447,20 @@ with tabs[6]:
             except Exception:
                 pseudo_r2 = np.nan
 
-            # Probability slice vs selected feature
-            feat = st.selectbox("Slice feature", FEATURES, index=0)
+            feat = st.selectbox("Slice feature", FEATURES, index=0, key="ologit_slice_feature")
             q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
-            # Guard against degenerate quantiles
             if not np.isfinite(q05) or not np.isfinite(q95) or q05 == q95:
                 st.warning(f"Cannot slice on {feat}: degenerate quantiles.")
             else:
                 grid = np.linspace(q05, q95, 60)
                 med = df[FEATURES].median()
-
                 Xslice = pd.DataFrame([med] * len(grid))
                 Xslice[feat] = grid
                 for c in FEATURES:
                     mu, sd = df[c].mean(), df[c].std(ddof=0)
                     Xslice[c+"_z"] = 0.0 if sd == 0 else (Xslice[c] - mu) / sd
-
                 exog_slice = Xslice[[f+"_z" for f in FEATURES]].to_numpy()
-
-                # Use results' predict (no constant)
-                probs = res.predict(exog=exog_slice)  # shape: (n_grid, n_classes)
-
-                # Guard if prediction yields empty
+                probs = res.predict(exog=exog_slice)
                 if probs.size == 0:
                     st.warning("Prediction returned no probabilities (degenerate configuration).")
                 else:
@@ -501,7 +479,6 @@ with tabs[6]:
 
         except Exception as e:
             st.warning(f"Ordered logit failed: {e}")
-
 
 # ---- Regularization ----
 with tabs[7]:
@@ -533,12 +510,12 @@ with tabs[7]:
 # ---- Agents ----
 with tabs[8]:
     st.subheader("Agents (QC Sensor)")
-    idx = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0)
-    row = zdf.iloc[int(idx)]
+    idx_a = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0, key="agent_row_idx")
+    row = zdf.iloc[int(idx_a)]
 
     # OLS prediction (extract first element, then cast)
-    pred_series = mdl.predict(zdf.iloc[[int(idx)]])
-    ols_pred = float(mdl.predict(zdf.iloc[[int(idx)]]).iloc[0])
+    pred_series = mdl.predict(zdf.iloc[[int(idx_a)]])
+    ols_pred = float(pred_series.iloc[0])
 
     # Agent V prediction
     av = agent_v_predict(row)
@@ -555,7 +532,6 @@ with tabs[8]:
     with col2:
         st.metric("Ensemble ŷ*", f"{y_ens:.2f}")
         st.write(f"QC status: {av['qc']}")
-
 
 # ---- Data ----
 with tabs[9]:
