@@ -436,37 +436,55 @@ with tabs[5]:
 # ---- Ordered Logit ----
 with tabs[6]:
     st.subheader("Ordered Logit (1–9)")
-    y_ord = zdf["overall_liking"].round().astype(int).clip(1,9)
-    X_ord = zdf[[f+"_z" for f in FEATURES]]
-    mod = OrderedModel(y_ord, X_ord, distr='logit')
+
+    # Outcomes: integers 1..9
+    y_ord = zdf["overall_liking"].round().clip(1, 9).astype(int)
+
+    # Explanatory vars: standardized features ONLY (no constant)
+    X_ord = zdf[[f+"_z" for f in FEATURES]].to_numpy()
+
+    mod = OrderedModel(y_ord, X_ord, distr="logit")
     try:
-        res = mod.fit(method='bfgs', disp=False)
-        llf = res.llf
-        llnull = OrderedModel(y_ord, np.ones((len(y_ord),1)), distr='logit').fit(method='bfgs', disp=False).llf
-        pseudo_r2 = 1 - llf/llnull
+        res = mod.fit(method="bfgs", disp=False)
+
+        # Null (cutpoints only): zero columns -> no constant
+        X_null = np.empty((len(y_ord), 0))
+        res0 = OrderedModel(y_ord, X_null, distr="logit").fit(method="bfgs", disp=False)
+
+        pseudo_r2 = 1.0 - (res.llf / res0.llf)
+
+        # Probability slice vs a chosen feature
         feat = st.selectbox("Slice feature", FEATURES, index=0)
-        q05,q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
+        q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
         grid = np.linspace(q05, q95, 60)
         med = df[FEATURES].median()
-        Xslice = pd.DataFrame([med]*len(grid)); Xslice[feat] = grid
+
+        Xslice = pd.DataFrame([med] * len(grid))
+        Xslice[feat] = grid
         for c in FEATURES:
             mu, sd = df[c].mean(), df[c].std(ddof=0)
-            Xslice[c+"_z"] = 0.0 if sd==0 else (Xslice[c]-mu)/sd
-        probs = res.model.predict(res.params, exog=Xslice[[f+"_z" for f in FEATURES]])
+            Xslice[c+"_z"] = 0.0 if sd == 0 else (Xslice[c] - mu) / sd
+
+        exog_slice = Xslice[[f+"_z" for f in FEATURES]].to_numpy()
+        probs = res.model.predict(res.params, exog=exog_slice)
+
         prob_df = pd.DataFrame(probs, columns=[f"class_{i}" for i in range(1, probs.shape[1]+1)])
         prob_df["x"] = grid
         figprob = go.Figure()
-        for i in range(1,10):
+        for i in range(1, 10):
             col = f"class_{i}"
             if col in prob_df:
                 figprob.add_trace(go.Scatter(x=prob_df["x"], y=prob_df[col], mode="lines", name=f"Pr(y={i})"))
         figprob.update_layout(title=f"Class Probabilities vs {feat}")
         st.plotly_chart(_crosshair(figprob), use_container_width=True)
+
         with st.expander("Model summary"):
             st.text(str(res.summary()))
         st.info(f"McFadden pseudo-R²: {pseudo_r2:.3f}")
+
     except Exception as e:
         st.warning(f"Ordered logit failed: {e}")
+
 
 # ---- Regularization ----
 with tabs[7]:
