@@ -40,6 +40,11 @@ h1,h2,h3,h4 {font-family:"Segoe UI","Roboto",sans-serif;color:#e6edf3;border-bot
 [data-testid="stDataFrame"] {border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.3);} 
 </style>""", unsafe_allow_html=True)
 
+# ----------------- App Header -----------------
+st.title("Sensor‑Centric Econometric Suite for Agri‑Food Systems")
+st.caption("Agri‑food sensor‑centric panel econometrics: SPC & drift, uncertainty, trade‑offs, ordered logit, regularization, and agent‑assisted predictions.")
+st.markdown(f"<div style='opacity:0.8;font-weight:600;margin-top:-6px;'>Version: {APP_VERSION}</div>", unsafe_allow_html=True)
+
 # ----------------- Helpers -----------------
 def _crosshair(fig: go.Figure) -> go.Figure:
     fig.update_layout(
