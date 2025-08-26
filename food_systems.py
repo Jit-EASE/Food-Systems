@@ -522,6 +522,7 @@ with tabs[8]:
         st.write(f"QC status: {av['qc']}")
 
 
+
 # ---- Data ----
 with tabs[9]:
     st.subheader("Data Preview")
