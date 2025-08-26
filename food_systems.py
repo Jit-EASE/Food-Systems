@@ -56,6 +56,26 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ----------------- Helpers -----------------
+def bootstrap_bands(formula: str, zdf: pd.DataFrame, new_exog: pd.DataFrame,
+                    B: int = 200, seed: int = 123, min_success: int = 10):
+    """Nonparametric bootstrap of prediction bands, refitting OLS on zdf (has *_z columns)."""
+    rng = np.random.default_rng(seed)
+    n = len(zdf)
+    preds = []
+    for _ in range(B):
+        idx = rng.integers(0, n, n)  # bootstrap indices
+        try:
+            m = smf.ols(formula=formula, data=zdf.iloc[idx]).fit()
+            preds.append(m.predict(new_exog).to_numpy())
+        except Exception:
+            # Singular design (rare with FE), just skip
+            continue
+    if len(preds) < min_success:
+        return None  # signal to use parametric fallback
+    P = np.vstack(preds)
+    # 5/20/50/80/95 percentile bands
+    return np.percentile(P, [5, 20, 50, 80, 95], axis=0)
+
 def _crosshair(fig: go.Figure) -> go.Figure:
     fig.update_layout(
         hovermode="x unified",
@@ -295,45 +315,53 @@ with tabs[0]:
         st.plotly_chart(_crosshair(figc), use_container_width=True)
     st.caption("Designed & Developed by Jit")
 
-# ---- Uncertainty ----
 with tabs[1]:
     st.subheader("Uncertainty (Bootstrap)")
+
     feat = st.selectbox("Slice feature", FEATURES, index=0,
                         key=f"{APP_KEY_PREFIX}_unc_slice_feature")
+
+    # Build slice grid and "median row" exog with z-features + FE cols
     q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
     grid = np.linspace(q05, q95, 60)
     med = df[FEATURES].median()
-    med_df = pd.DataFrame([med]*len(grid)); med_df[feat] = grid
+    med_df = pd.DataFrame([med]*len(grid))
+    med_df[feat] = grid
     for c in FEATURES:
         mu, sd = df[c].mean(), df[c].std(ddof=0)
-        med_df[c+"_z"] = 0.0 if sd==0 else (med_df[c]-mu)/sd
+        med_df[c+"_z"] = 0.0 if sd == 0 else (med_df[c] - mu)/sd
+    # Use existing (seen) FE levels to avoid unseen-category issues
     med_df["panelist"] = df["panelist"].iloc[0]
     med_df["batch"]    = df["batch"].iloc[0]
     med_df["session"]  = df["session"].iloc[0]
 
+    # Point estimate from the fitted model
     y0 = mdl.predict(med_df)
-    boot_preds = []
-    rng = np.random.default_rng(123)
-    for _ in range(200):
-        idx = rng.integers(0, len(df), len(df))
-        try:
-            boot_model = smf.ols(formula=formula, data=df.iloc[idx]).fit()
-            boot_preds.append(boot_model.predict(med_df))
-        except Exception:
-            pass
-    if len(boot_preds) >= 5:
-        bands = np.percentile(np.vstack(boot_preds), [5,20,50,80,95], axis=0)
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=grid, y=y0, name="ŷ", mode="lines"))
-        fig.add_trace(go.Scatter(x=grid, y=bands[4], line=dict(width=0)))
-        fig.add_trace(go.Scatter(x=grid, y=bands[0], fill="tonexty", opacity=0.18, name="95%"))
-        fig.add_trace(go.Scatter(x=grid, y=bands[3], line=dict(width=0)))
-        fig.add_trace(go.Scatter(x=grid, y=bands[1], fill="tonexty", opacity=0.28, name="80%"))
+
+    # --- Bootstrap on zdf (not df) ---
+    bands = bootstrap_bands(formula, zdf, med_df, B=200, seed=123, min_success=10)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=grid, y=y0, name="ŷ", mode="lines"))
+
+    if bands is not None:
+        # bands shape: (5, len(grid)) for [5,20,50,80,95] percentiles
+        p5, p20, p50, p80, p95 = bands
+        fig.add_trace(go.Scatter(x=grid, y=p95, line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=grid, y=p5, fill="tonexty", opacity=0.18, name="95%"))
+        fig.add_trace(go.Scatter(x=grid, y=p80, line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=grid, y=p20, fill="tonexty", opacity=0.28, name="80%"))
         st.plotly_chart(_crosshair(fig), use_container_width=True)
     else:
-        st.warning("Bootstrap failed to converge; showing point estimate only.")
-        st.plotly_chart(_crosshair(px.line(x=grid, y=y0, labels={"x":feat, "y":"ŷ"})),
-                        use_container_width=True)
+        # Parametric fallback: always shows bands even if bootstrap is singular
+        sf95 = mdl.get_prediction(med_df).summary_frame(alpha=0.05)
+        sf80 = mdl.get_prediction(med_df).summary_frame(alpha=0.20)
+        fig.add_trace(go.Scatter(x=grid, y=sf95["obs_ci_upper"], line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=grid, y=sf95["obs_ci_lower"], fill="tonexty", opacity=0.18, name="95%"))
+        fig.add_trace(go.Scatter(x=grid, y=sf80["obs_ci_upper"], line=dict(width=0), showlegend=False))
+        fig.add_trace(go.Scatter(x=grid, y=sf80["obs_ci_lower"], fill="tonexty", opacity=0.28, name="80%"))
+        st.plotly_chart(_crosshair(fig), use_container_width=True)
+        st.info("Bootstrap bands fell back to parametric prediction intervals for this view.")
 
 # ---- Diagnostics ----
 with tabs[2]:
