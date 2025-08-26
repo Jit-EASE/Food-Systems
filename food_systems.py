@@ -501,14 +501,14 @@ with tabs[8]:
     idx = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0)
     row = zdf.iloc[int(idx)]
 
-    # OLS prediction (safe single extraction)
+    # OLS prediction (extract first element, then cast)
     pred_series = mdl.predict(zdf.iloc[[int(idx)]])
     ols_pred = float(pred_series.iloc[0])
 
     # Agent V prediction
     av = agent_v_predict(row)
 
-    # Arbitration: weight Agent V if it’s closer to observed truth than OLS
+    # Arbitration: weight Agent V if closer to observed truth
     alpha = 0.25 if abs(av["y_v"] - row["overall_liking"]) < abs(ols_pred - row["overall_liking"]) else 0.0
     y_ens = (1 - alpha) * ols_pred + alpha * av["y_v"]
 
