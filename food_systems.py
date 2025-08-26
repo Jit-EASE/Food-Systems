@@ -463,29 +463,19 @@ with tabs[6]:
 # ---- Regularization ----
 with tabs[7]:
     st.subheader("Regularization: Ridge & LASSO vs OLS")
-
-    X = df[FEATURES].to_numpy()
-    y = df["overall_liking"].to_numpy()
-
-    scaler = StandardScaler()
-    Xs = scaler.fit_transform(X)
-
+    X = df[FEATURES].to_numpy(); y = df["overall_liking"].to_numpy()
+    scaler = StandardScaler(); Xs = scaler.fit_transform(X)
     alphas = np.logspace(-3, 2, 50)
     ridge = RidgeCV(alphas=alphas).fit(Xs, y)
     lasso = LassoCV(alphas=alphas, cv=5, random_state=1).fit(Xs, y)
-
-    # Correct lasso_path usage (returns alphas, coefs, dual_gaps) – no fit_intercept arg
-    l_alphas, coefs, _ = lasso_path(Xs, y, alphas=np.logspace(-3, 1, 30))
+    l_alphas, coefs, _ = lasso_path(Xs, y, alphas=np.logspace(-3,1,30))
 
     ols = fit_ols_fe(df)[0]
     ols_coefs = pd.Series({f: ols.params.get(f+"_z", 0.0) for f in FEATURES}, name="OLS (β on z)")
     ridge_coefs = pd.Series(ridge.coef_, index=FEATURES, name="Ridge")
     lasso_coefs = pd.Series(np.nan_to_num(lasso.coef_), index=FEATURES, name="LASSO")
-
-    coef_cmp = pd.concat([ols_coefs, ridge_coefs, lasso_coefs], axis=1).reset_index() \
-                 .melt(id_vars="index", var_name="Model", value_name="Coef")
-    figcmp = px.bar(coef_cmp, x="Coef", y="index", color="Model", barmode="group",
-                    labels={"index": "Feature"})
+    coef_cmp = pd.concat([ols_coefs, ridge_coefs, lasso_coefs], axis=1).reset_index().melt(id_vars="index", var_name="Model", value_name="Coef")
+    figcmp = px.bar(coef_cmp, x="Coef", y="index", color="Model", barmode="group", labels={"index":"Feature"})
     figcmp.update_layout(title="Coefficient Comparison (standardized features)")
     st.plotly_chart(_crosshair(figcmp), use_container_width=True)
 
