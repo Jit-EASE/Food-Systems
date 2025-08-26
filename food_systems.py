@@ -20,7 +20,7 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor, OLSI
 from statsmodels.stats.diagnostic import het_breuschpagan
 
 # ----------------- Config -----------------
-APP_VERSION = "streamlit-v3.0-boardroom-sensors"
+APP_VERSION = "streamlit-v3.1-boardroom-sensors"
 FEATURES = ["dE","brix","salt_ppm","pH","spectral_centroid","peak_rate",
             "odor_pc1","peak_force","work_chew","fractures","rms"]
 
@@ -191,7 +191,6 @@ with tabs[1]:
     med_df["batch"]=df["batch"].iloc[0]
     med_df["session"]=df["session"].iloc[0]
     y0=mdl.predict(med_df)
-    # crude bootstrap (for demo)
     boot_preds=[]
     rng=np.random.default_rng(123)
     for _ in range(200):
@@ -257,4 +256,43 @@ with tabs[4]:
 # ---- Agents ----
 with tabs[5]:
     st.subheader("Agents (QC Sensor)")
-    idx=st.number_input("Row idx (Agent)",0,len(z
+    idx = st.number_input("Row index (Agent)", 0, len(zdf)-1, 0)
+    row = zdf.iloc[int(idx)]
+    ols_pred = float(mdl.predict(zdf.iloc[[int(idx)]]))[0]
+    av = agent_v_predict(row)
+    alpha = 0.25 if abs(av["y_v"] - row["overall_liking"]) < abs(ols_pred - row["overall_liking"]) else 0.0
+    y_ens = (1-alpha)*ols_pred + alpha*av["y_v"]
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("OLS Prediction", f"{ols_pred:.2f}")
+        st.metric("Agent V Prediction", f"{av['y_v']:.2f}")
+        st.metric("Confidence", f"{av['confidence']:.2f}")
+    with col2:
+        st.metric("Ensemble ŷ*", f"{y_ens:.2f}")
+        st.write(f"QC status: {av['qc']}")
+
+# ---- Data ----
+with tabs[6]:
+    st.subheader("Data Preview")
+    st.dataframe(df.head(200))
+    csv = df.to_csv(index=False).encode("utf-8")
+    st.download_button("Download CSV", csv, "synthetic_sensory_dataset.csv", "text/csv")
+
+# ---- Governance ----
+with tabs[7]:
+    st.subheader("Governance & Audit")
+    env_hash=hashlib.sha256(json.dumps({
+        "python":sys.version.split()[0],
+        "statsmodels":sm.__version__,
+        "pandas":pd.__version__,
+        "numpy":np.__version__,
+        "plotly":px.__version__
+    },sort_keys=True).encode()).hexdigest()[:12]
+    audit_rec={
+        "ts":time.strftime("%Y-%m-%d %H:%M:%S"),
+        "version":APP_VERSION,
+        "seed":seed,
+        "n_products":n_products,"n_batches":n_batches,"n_panel":n_panel,"n_sessions":n_sessions,"tpc":tpc,
+        "noise":noise,"env_hash":env_hash
+    }
+    st.json(audit_rec)
