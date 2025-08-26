@@ -21,13 +21,14 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor, OLSI
 from statsmodels.stats.diagnostic import het_breuschpagan
 
 # ----------------- Config -----------------
-APP_VERSION = "streamlit-v4.0-boardroom-sensors"
+APP_VERSION = "streamlit-v4.1-sensors"
+APP_KEY_PREFIX = "afs_v4_boardroom"
 FEATURES = [
     "dE","brix","salt_ppm","pH","spectral_centroid","peak_rate",
     "odor_pc1","peak_force","work_chew","fractures","rms"
 ]
 
-st.set_page_config(page_title="Food-System Sensory Econometrics", layout="wide")
+st.set_page_config(page_title="Sensor-Centric Econometrics • Agri-Food", layout="wide")
 
 # ----------------- Boardroom CSS -----------------
 st.markdown("""<style>
@@ -49,7 +50,7 @@ h1,h2,h3,h4 {font-family:"Segoe UI","Roboto",sans-serif;color:#e6edf3;border-bot
 st.markdown(f"""
 <div class="hero">
   <div class="title">Sensor-Centric Econometric Suite for Agri-Food Systems</div>
-  <div class="sub">Agri-food sensor-centric panel econometrics: SPC & drift, uncertainty, trade-offs, ordered logit, regularization, and agent-assisted predictions.</div>
+  <div class="sub">Panel econometrics fused with agri-food sensors: SPC & drift, uncertainty, trade-offs, ordered logit, regularization, and agent-assisted predictions.</div>
   <div class="ver">Version: {APP_VERSION}</div>
 </div>
 """, unsafe_allow_html=True)
@@ -117,7 +118,8 @@ def contribution_waterfall(model, row: pd.DataFrame, features_z):
 def targeter(model, row: pd.DataFrame, features_z, target_y: float, bounds: dict, steps: int = 150, lr: float = 0.15):
     x = row[features_z].iloc[0].copy()
     for _ in range(steps):
-        y = float(model.predict(pd.DataFrame([x]).assign(panelist=row["panelist"].iloc[0], batch=row["batch"].iloc[0], session=row["session"].iloc[0]))[0])
+        y = float(model.predict(pd.DataFrame([x]).assign(
+            panelist=row["panelist"].iloc[0], batch=row["batch"].iloc[0], session=row["session"].iloc[0]))[0])
         err = target_y - y
         if abs(err) < 1e-3:
             break
@@ -126,7 +128,8 @@ def targeter(model, row: pd.DataFrame, features_z, target_y: float, bounds: dict
         x[best] += lr * np.sign(err) * np.sign(grads[best])
         lo, hi = bounds.get(best.replace("_z",""), (-2.0, 2.0))
         x[best] = float(np.clip(x[best], lo, hi))
-    final_pred = float(model.predict(pd.DataFrame([x]).assign(panelist=row["panelist"].iloc[0], batch=row["batch"].iloc[0], session=row["session"].iloc[0]))[0])
+    final_pred = float(model.predict(pd.DataFrame([x]).assign(
+        panelist=row["panelist"].iloc[0], batch=row["batch"].iloc[0], session=row["session"].iloc[0]))[0])
     out = pd.DataFrame({"feature_z": x.index, "z_value": x.values})
     out["feature"] = out["feature_z"].str.replace("_z","", regex=False)
     return out[["feature","z_value"]], final_pred
@@ -155,7 +158,6 @@ def simulate_sensory_data(n_products=8, n_batches_per_product=3, n_panelists=24,
     sessions = [f"S{i+1}" for i in range(n_sessions)]
     panelists = [f"R{i+1:02d}" for i in range(n_panelists)]
     rows = []
-    # Latent product traits
     prod_latent = {
         p: {
             "color_L": rng.normal(65,5), "color_a": rng.normal(5,3), "color_b": rng.normal(20,4),
@@ -228,13 +230,13 @@ def agent_v_predict(row: pd.Series) -> dict:
 
 # ----------------- Sidebar -----------------
 st.sidebar.header("Controls")
-n_products = st.sidebar.slider("Products", 4, 20, 8, key="ctl_products")
-n_batches = st.sidebar.slider("Batches/product", 2, 6, 3, key="ctl_batches")
-n_panel = st.sidebar.slider("Panelists", 8, 40, 24, key="ctl_panel")
-n_sessions = st.sidebar.slider("Sessions", 2, 8, 4, key="ctl_sessions")
-tpc = st.sidebar.slider("Tastings/combo", 1, 5, 3, key="ctl_tpc")
-noise = st.sidebar.slider("Noise SD", 0.2, 1.5, 0.8, key="ctl_noise")
-seed = st.sidebar.number_input("Seed", value=42, key="ctl_seed")
+n_products = st.sidebar.slider("Products", 4, 20, 8, key=f"{APP_KEY_PREFIX}_ctl_products")
+n_batches  = st.sidebar.slider("Batches/product", 2, 6, 3, key=f"{APP_KEY_PREFIX}_ctl_batches")
+n_panel    = st.sidebar.slider("Panelists", 8, 40, 24, key=f"{APP_KEY_PREFIX}_ctl_panel")
+n_sessions = st.sidebar.slider("Sessions", 2, 8, 4, key=f"{APP_KEY_PREFIX}_ctl_sessions")
+tpc        = st.sidebar.slider("Tastings/combo", 1, 5, 3, key=f"{APP_KEY_PREFIX}_ctl_tpc")
+noise      = st.sidebar.slider("Noise SD", 0.2, 1.5, 0.8, key=f"{APP_KEY_PREFIX}_ctl_noise")
+seed       = st.sidebar.number_input("Seed", value=42, key=f"{APP_KEY_PREFIX}_ctl_seed")
 
 df = simulate_sensory_data(n_products, n_batches, n_panel, n_sessions, tpc, seed, noise)
 mdl, zdf, z_features, formula = fit_ols_fe(df)
@@ -248,7 +250,7 @@ vif_df = pd.DataFrame({
     "VIF": [variance_inflation_factor(sm.add_constant(zdf[z_features]).to_numpy(), i)
              for i in range(1, len(z_features)+1)]
 })
-cal = sm.OLS(zdf["overall_liking"], sm.add_constant(zdf["y_hat"])) .fit()
+cal = sm.OLS(zdf["overall_liking"], sm.add_constant(zdf["y_hat"])).fit()
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 kpi1.metric("R²", f"{mdl.rsquared:.3f}")
@@ -275,17 +277,19 @@ with tabs[0]:
     st.subheader("Model Overview")
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.scatter(zdf, x="y_hat", y="overall_liking", hover_data=["product","batch","panelist","session"]) 
+        fig = px.scatter(zdf, x="y_hat", y="overall_liking",
+                         hover_data=["product","batch","panelist","session"])
         fig.add_trace(go.Scatter(x=[1,9], y=[1,9], mode="lines", name="Ideal"))
         st.plotly_chart(_crosshair(fig), use_container_width=True)
     with col2:
-        params = mdl.params.drop([p for p in mdl.params.index if p.startswith("C(") or p=="Intercept"]) 
+        params = mdl.params.drop([p for p in mdl.params.index if p.startswith("C(") or p=="Intercept"])
         conf = mdl.conf_int().loc[params.index]
         coef_df = pd.DataFrame({"term": params.index, "coef": params.values,
                                 "ci_low": conf[0].values, "ci_high": conf[1].values}).sort_values("coef")
         figc = go.Figure()
         figc.add_trace(go.Scatter(x=coef_df["coef"], y=coef_df["term"],
-                                  error_x=dict(type="data", array=coef_df["ci_high"]-coef_df["coef"],
+                                  error_x=dict(type="data",
+                                               array=coef_df["ci_high"]-coef_df["coef"],
                                                arrayminus=coef_df["coef"]-coef_df["ci_low"]),
                                   mode="markers"))
         st.plotly_chart(_crosshair(figc), use_container_width=True)
@@ -294,7 +298,8 @@ with tabs[0]:
 # ---- Uncertainty ----
 with tabs[1]:
     st.subheader("Uncertainty (Bootstrap)")
-    feat = st.selectbox("Slice feature", FEATURES, index=0, key="unc_slice_feature")
+    feat = st.selectbox("Slice feature", FEATURES, index=0,
+                        key=f"{APP_KEY_PREFIX}_unc_slice_feature")
     q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
     grid = np.linspace(q05, q95, 60)
     med = df[FEATURES].median()
@@ -302,7 +307,9 @@ with tabs[1]:
     for c in FEATURES:
         mu, sd = df[c].mean(), df[c].std(ddof=0)
         med_df[c+"_z"] = 0.0 if sd==0 else (med_df[c]-mu)/sd
-    med_df["panelist"] = df["panelist"].iloc[0]; med_df["batch"] = df["batch"].iloc[0]; med_df["session"] = df["session"].iloc[0]
+    med_df["panelist"] = df["panelist"].iloc[0]
+    med_df["batch"]    = df["batch"].iloc[0]
+    med_df["session"]  = df["session"].iloc[0]
 
     y0 = mdl.predict(med_df)
     boot_preds = []
@@ -325,19 +332,22 @@ with tabs[1]:
         st.plotly_chart(_crosshair(fig), use_container_width=True)
     else:
         st.warning("Bootstrap failed to converge; showing point estimate only.")
-        st.plotly_chart(_crosshair(px.line(x=grid, y=y0, labels={"x":feat, "y":"ŷ"})), use_container_width=True)
+        st.plotly_chart(_crosshair(px.line(x=grid, y=y0, labels={"x":feat, "y":"ŷ"})),
+                        use_container_width=True)
 
 # ---- Diagnostics ----
 with tabs[2]:
     st.subheader("Diagnostics")
     col1, col2 = st.columns(2)
     with col1:
-        fig = px.scatter(zdf, x="y_hat", y="resid", labels={"y_hat":"Fitted (ŷ)", "resid":"Residual"})
+        fig = px.scatter(zdf, x="y_hat", y="resid",
+                         labels={"y_hat":"Fitted (ŷ)", "resid":"Residual"})
         fig.add_hline(y=0)
         st.plotly_chart(_crosshair(fig), use_container_width=True)
     with col2:
         cal_df = calibration_by_decile(zdf["overall_liking"], zdf["y_hat"], q=10)
-        fig_cal = px.line(cal_df, x="yhat_mean", y="y_mean", markers=True, labels={"yhat_mean":"Mean ŷ (bin)","y_mean":"Mean y"})
+        fig_cal = px.line(cal_df, x="yhat_mean", y="y_mean", markers=True,
+                          labels={"yhat_mean":"Mean ŷ (bin)","y_mean":"Mean y"})
         fig_cal.add_trace(go.Scatter(x=[1,9], y=[1,9], mode="lines", name="Ideal"))
         st.plotly_chart(_crosshair(fig_cal), use_container_width=True)
 
@@ -353,17 +363,20 @@ with tabs[2]:
 
     hv = residual_var_heatmap(zdf)
     pivot = hv.pivot(index="session", columns="batch", values="resid_var")
-    fig_hm = px.imshow(pivot, aspect="auto", color_continuous_scale="Blues", origin="lower", labels=dict(color="Var(resid)"))
+    fig_hm = px.imshow(pivot, aspect="auto", color_continuous_scale="Blues",
+                       origin="lower", labels=dict(color="Var(resid)"))
     fig_hm.update_layout(title="Residual Variance Heatmap — batch × session")
     st.plotly_chart(_crosshair(fig_hm), use_container_width=True)
 
-    cooks = pd.DataFrame({"row": np.arange(len(df)), "cooks_d": OLSInfluence(mdl).cooks_distance[0]})
+    cooks = pd.DataFrame({"row": np.arange(len(df)),
+                          "cooks_d": OLSInfluence(mdl).cooks_distance[0]})
     st.dataframe(cooks.sort_values("cooks_d", ascending=False).head(15))
 
 # ---- Sensitivity ----
 with tabs[3]:
     st.subheader("Sensitivity & Contributions")
-    idx = st.number_input("Row index", min_value=0, max_value=len(zdf)-1, value=0, key="sens_row_idx")
+    idx = st.number_input("Row index", min_value=0, max_value=len(zdf)-1, value=0,
+                          key=f"{APP_KEY_PREFIX}_sens_row_idx")
     row = zdf.iloc[[int(idx)]][["panelist","batch","session"] + z_features]
 
     tor = tornado_effects(mdl, row, z_features)
@@ -386,12 +399,15 @@ with tabs[3]:
 # ---- SPC & Drift ----
 with tabs[4]:
     st.subheader("SPC & Drift")
-    feat = st.selectbox("SPC feature (batch means)", ["dE","odor_pc1","spectral_centroid","brix","salt_ppm"], index=0, key="spc_batch_feature")
+    feat = st.selectbox("SPC feature (batch means)",
+                        ["dE","odor_pc1","spectral_centroid","brix","salt_ppm"],
+                        index=0, key=f"{APP_KEY_PREFIX}_spc_batch_feature")
     s = df.groupby("batch")[feat].mean()
     mu = s.mean(); sd = s.std(ddof=0)
     ucl = mu + 3*sd; lcl = mu - 3*sd
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=s.index.astype(str), y=s.values, mode="lines+markers", name=feat))
+    fig.add_trace(go.Scatter(x=s.index.astype(str), y=s.values,
+                             mode="lines+markers", name=feat))
     fig.add_hline(y=mu, line_dash="dash", annotation_text="Center")
     fig.add_hline(y=ucl, line_dash="dot", annotation_text="UCL")
     fig.add_hline(y=lcl, line_dash="dot", annotation_text="LCL")
@@ -407,9 +423,12 @@ with tabs[5]:
     st.subheader("Trade-offs: Targeting & Pareto")
     tcol1, tcol2 = st.columns([1,2])
     with tcol1:
-        idx_t = st.number_input("Row index (targeter)", min_value=0, max_value=len(zdf)-1, value=0, key="trade_row_idx")
-        target_y = st.slider("Target liking", 1.0, 9.0, 7.5, 0.1, key="trade_target_y")
-        bound_z = st.slider("Feature bound |z| ≤", 0.5, 3.0, 2.0, 0.1, key="trade_bound_z")
+        idx_t = st.number_input("Row index (targeter)", min_value=0, max_value=len(zdf)-1, value=0,
+                                key=f"{APP_KEY_PREFIX}_trade_row_idx")
+        target_y = st.slider("Target liking", 1.0, 9.0, 7.5, 0.1,
+                             key=f"{APP_KEY_PREFIX}_trade_target_y")
+        bound_z = st.slider("Feature bound |z| ≤", 0.5, 3.0, 2.0, 0.1,
+                            key=f"{APP_KEY_PREFIX}_trade_bound_z")
         row_t = zdf.iloc[[int(idx_t)]][["panelist","batch","session"] + z_features]
         bounds = {f: (-float(bound_z), float(bound_z)) for f in FEATURES}
         sol, yfinal = targeter(mdl, row_t, z_features, float(target_y), bounds)
@@ -421,8 +440,10 @@ with tabs[5]:
         tmp["y_hat"] = zdf2["y_hat"].values
         tmp["cost"] = tmp.apply(cost_proxy, axis=1)
         pf = pareto_front(tmp, "y_hat", "salt_ppm", "cost")
-        figp = px.scatter(tmp, x="salt_ppm", y="y_hat", size="cost", color="cost", hover_data=["product","batch"])
-        figp.add_trace(go.Scatter(x=pf["salt_ppm"], y=pf["y_hat"], mode="lines+markers", name="Pareto"))
+        figp = px.scatter(tmp, x="salt_ppm", y="y_hat", size="cost", color="cost",
+                          hover_data=["product","batch"])
+        figp.add_trace(go.Scatter(x=pf["salt_ppm"], y=pf["y_hat"],
+                                  mode="lines+markers", name="Pareto"))
         figp.update_layout(title="Liking vs Sodium vs Cost (Pareto front)")
         st.plotly_chart(_crosshair(figp), use_container_width=True)
 
@@ -447,7 +468,8 @@ with tabs[6]:
             except Exception:
                 pseudo_r2 = np.nan
 
-            feat = st.selectbox("Slice feature", FEATURES, index=0, key="ologit_slice_feature")
+            feat = st.selectbox("Slice feature", FEATURES, index=0,
+                                key=f"{APP_KEY_PREFIX}_ologit_slice_feature")
             q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
             if not np.isfinite(q05) or not np.isfinite(q95) or q05 == q95:
                 st.warning(f"Cannot slice on {feat}: degenerate quantiles.")
@@ -469,7 +491,8 @@ with tabs[6]:
                     figprob = go.Figure()
                     for i in range(1, probs.shape[1] + 1):
                         col = f"class_{i}"
-                        figprob.add_trace(go.Scatter(x=prob_df["x"], y=prob_df[col], mode="lines", name=f"Pr(y={i})"))
+                        figprob.add_trace(go.Scatter(x=prob_df["x"], y=prob_df[col],
+                                                     mode="lines", name=f"Pr(y={i})"))
                     figprob.update_layout(title=f"Class Probabilities vs {feat}")
                     st.plotly_chart(_crosshair(figprob), use_container_width=True)
 
@@ -494,8 +517,10 @@ with tabs[7]:
     ols_coefs = pd.Series({f: ols.params.get(f+"_z", 0.0) for f in FEATURES}, name="OLS (β on z)")
     ridge_coefs = pd.Series(ridge.coef_, index=FEATURES, name="Ridge")
     lasso_coefs = pd.Series(np.nan_to_num(lasso.coef_), index=FEATURES, name="LASSO")
-    coef_cmp = pd.concat([ols_coefs, ridge_coefs, lasso_coefs], axis=1).reset_index().melt(id_vars="index", var_name="Model", value_name="Coef")
-    figcmp = px.bar(coef_cmp, x="Coef", y="index", color="Model", barmode="group", labels={"index":"Feature"})
+    coef_cmp = pd.concat([ols_coefs, ridge_coefs, lasso_coefs], axis=1) \
+                 .reset_index().melt(id_vars="index", var_name="Model", value_name="Coef")
+    figcmp = px.bar(coef_cmp, x="Coef", y="index", color="Model", barmode="group",
+                    labels={"index":"Feature"})
     figcmp.update_layout(title="Coefficient Comparison (standardized features)")
     st.plotly_chart(_crosshair(figcmp), use_container_width=True)
 
@@ -510,17 +535,15 @@ with tabs[7]:
 # ---- Agents ----
 with tabs[8]:
     st.subheader("Agents (QC Sensor)")
-    idx_a = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0, key="agent_row_idx")
+    idx_a = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0,
+                            key=f"{APP_KEY_PREFIX}_agent_row_idx")
     row = zdf.iloc[int(idx_a)]
 
-    # OLS prediction (extract first element, then cast)
     pred_series = mdl.predict(zdf.iloc[[int(idx_a)]])
     ols_pred = float(pred_series.iloc[0])
 
-    # Agent V prediction
     av = agent_v_predict(row)
 
-    # Arbitration: weight Agent V if closer to observed truth
     alpha = 0.25 if abs(av["y_v"] - row["overall_liking"]) < abs(ols_pred - row["overall_liking"]) else 0.0
     y_ens = (1 - alpha) * ols_pred + alpha * av["y_v"]
 
@@ -548,13 +571,15 @@ with tabs[10]:
         "statsmodels": sm.__version__,
         "pandas": pd.__version__,
         "numpy": np.__version__,
-        "plotly": plotly.__version__
+        "plotly": plotly.__version__,
+        "app_version": APP_VERSION
     }, sort_keys=True).encode()).hexdigest()[:12]
     audit_rec = {
         "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
         "version": APP_VERSION,
         "seed": int(seed),
-        "n_products": int(n_products), "n_batches": int(n_batches), "n_panel": int(n_panel), "n_sessions": int(n_sessions), "tpc": int(tpc),
+        "n_products": int(n_products), "n_batches": int(n_batches), "n_panel": int(n_panel),
+        "n_sessions": int(n_sessions), "tpc": int(tpc),
         "noise": float(noise), "env_hash": env_hash
     }
     st.json(audit_rec)
