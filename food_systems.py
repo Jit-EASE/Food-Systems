@@ -38,12 +38,20 @@ h1,h2,h3,h4 {font-family:"Segoe UI","Roboto",sans-serif;color:#e6edf3;border-bot
 .stTabs [aria-selected="true"] {border-bottom:3px solid #00c6ff;color:#00c6ff;}
 .stButton>button {background:linear-gradient(135deg,#0066cc,#00c6ff);color:white;border-radius:12px;font-weight:600;border:none;padding:0.5rem 1.2rem;box-shadow:0 3px 12px rgba(0,0,0,0.3);} .stButton>button:hover {background:linear-gradient(135deg,#005bb5,#00aaff);} 
 [data-testid="stDataFrame"] {border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.3);} 
+.hero{background:linear-gradient(135deg,rgba(0,198,255,0.08),rgba(0,102,204,0.08));border:1px solid rgba(255,255,255,0.08);padding:18px 22px;border-radius:20px;box-shadow:inset 0 6px 24px rgba(0,0,0,0.28),0 4px 18px rgba(0,0,0,0.35);margin-bottom:14px}
+.hero .title{font-size:28px;font-weight:800;color:#e6edf3;letter-spacing:.2px}
+.hero .sub{font-size:14px;color:#cbd5e1;margin-top:4px}
+.hero .ver{font-size:13px;color:#99e9ff;margin-top:2px;font-weight:600}
 </style>""", unsafe_allow_html=True)
 
 # ----------------- App Header -----------------
-st.title("Sensor‑Centric Econometric Suite for Agri‑Food Systems")
-st.caption("Agri‑food sensor‑centric panel econometrics: SPC & drift, uncertainty, trade‑offs, ordered logit, regularization, and agent‑assisted predictions.")
-st.markdown(f"<div style='opacity:0.8;font-weight:600;margin-top:-6px;'>Version: {APP_VERSION}</div>", unsafe_allow_html=True)
+st.markdown(f"""
+<div class="hero">
+  <div class="title">Sensor‑Centric Econometric Suite for Agri‑Food Systems</div>
+  <div class="sub">Agri‑food sensor‑centric panel econometrics: SPC & drift, uncertainty, trade‑offs, ordered logit, regularization, and agent‑assisted predictions.</div>
+  <div class="ver">Version: {APP_VERSION}</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ----------------- Helpers -----------------
 def _crosshair(fig: go.Figure) -> go.Figure:
