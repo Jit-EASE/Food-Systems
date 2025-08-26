@@ -463,7 +463,8 @@ with tabs[7]:
     alphas = np.logspace(-3, 2, 50)
     ridge = RidgeCV(alphas=alphas).fit(Xs, y)
     lasso = LassoCV(alphas=alphas, cv=5, random_state=1).fit(Xs, y)
-    l_alphas, coefs, _ = lasso_path(Xs, y, alphas=np.logspace(-3,1,30))
+    l_alphas, coefs, _ = lasso_path(Xs, y, alphas=np.logspace(-3, 1, 30))
+
 
     ols = fit_ols_fe(df)[0]
     ols_coefs = pd.Series({f: ols.params.get(f+"_z", 0.0) for f in FEATURES}, name="OLS (β on z)")
