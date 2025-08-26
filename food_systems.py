@@ -6,6 +6,7 @@
 import os, sys, json, hashlib, time
 import numpy as np
 import pandas as pd
+import plotly  # for plotly.__version__
 import plotly.express as px
 import plotly.graph_objects as go
 from statistics import NormalDist
@@ -437,53 +438,69 @@ with tabs[5]:
 with tabs[6]:
     st.subheader("Ordered Logit (1–9)")
 
-    # Outcomes: integers 1..9
+    # Outcomes: integers 1..9 (no constant anywhere)
     y_ord = zdf["overall_liking"].round().clip(1, 9).astype(int)
 
-    # Explanatory vars: standardized features ONLY (no constant)
-    X_ord = zdf[[f+"_z" for f in FEATURES]].to_numpy()
+    # Guard: need at least 2 distinct classes
+    uniq = np.unique(y_ord.values)
+    if uniq.size < 2:
+        st.warning("Ordered logit skipped: only one rating class in the data.")
+    else:
+        # Explanatory vars: standardized features ONLY (no constant)
+        X_ord = zdf[[f+"_z" for f in FEATURES]].to_numpy()
 
-    mod = OrderedModel(y_ord, X_ord, distr="logit")
-    try:
-        res = mod.fit(method="bfgs", disp=False)
+        mod = OrderedModel(y_ord, X_ord, distr="logit")
+        try:
+            res = mod.fit(method="bfgs", disp=False)
 
-        # Null (cutpoints only): zero columns -> no constant
-        X_null = np.empty((len(y_ord), 0))
-        res0 = OrderedModel(y_ord, X_null, distr="logit").fit(method="bfgs", disp=False)
+            # Null model (cutpoints only): zero columns; if that fails, fall back to NaN pseudo-R²
+            try:
+                X_null = np.empty((len(y_ord), 0))
+                res0 = OrderedModel(y_ord, X_null, distr="logit").fit(method="bfgs", disp=False)
+                pseudo_r2 = 1.0 - (res.llf / res0.llf)
+            except Exception:
+                pseudo_r2 = np.nan
 
-        pseudo_r2 = 1.0 - (res.llf / res0.llf)
+            # Probability slice vs selected feature
+            feat = st.selectbox("Slice feature", FEATURES, index=0)
+            q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
+            # Guard against degenerate quantiles
+            if not np.isfinite(q05) or not np.isfinite(q95) or q05 == q95:
+                st.warning(f"Cannot slice on {feat}: degenerate quantiles.")
+            else:
+                grid = np.linspace(q05, q95, 60)
+                med = df[FEATURES].median()
 
-        # Probability slice vs a chosen feature
-        feat = st.selectbox("Slice feature", FEATURES, index=0)
-        q05, q95 = df[feat].quantile(0.05), df[feat].quantile(0.95)
-        grid = np.linspace(q05, q95, 60)
-        med = df[FEATURES].median()
+                Xslice = pd.DataFrame([med] * len(grid))
+                Xslice[feat] = grid
+                for c in FEATURES:
+                    mu, sd = df[c].mean(), df[c].std(ddof=0)
+                    Xslice[c+"_z"] = 0.0 if sd == 0 else (Xslice[c] - mu) / sd
 
-        Xslice = pd.DataFrame([med] * len(grid))
-        Xslice[feat] = grid
-        for c in FEATURES:
-            mu, sd = df[c].mean(), df[c].std(ddof=0)
-            Xslice[c+"_z"] = 0.0 if sd == 0 else (Xslice[c] - mu) / sd
+                exog_slice = Xslice[[f+"_z" for f in FEATURES]].to_numpy()
 
-        exog_slice = Xslice[[f+"_z" for f in FEATURES]].to_numpy()
-        probs = res.model.predict(res.params, exog=exog_slice)
+                # Use results' predict (no constant)
+                probs = res.predict(exog=exog_slice)  # shape: (n_grid, n_classes)
 
-        prob_df = pd.DataFrame(probs, columns=[f"class_{i}" for i in range(1, probs.shape[1]+1)])
-        prob_df["x"] = grid
-        figprob = go.Figure()
-        for i in range(1, 10):
-            col = f"class_{i}"
-            if col in prob_df:
-                figprob.add_trace(go.Scatter(x=prob_df["x"], y=prob_df[col], mode="lines", name=f"Pr(y={i})"))
-        figprob.update_layout(title=f"Class Probabilities vs {feat}")
-        st.plotly_chart(_crosshair(figprob), use_container_width=True)
+                # Guard if prediction yields empty
+                if probs.size == 0:
+                    st.warning("Prediction returned no probabilities (degenerate configuration).")
+                else:
+                    prob_df = pd.DataFrame(probs, columns=[f"class_{i}" for i in range(1, probs.shape[1]+1)])
+                    prob_df["x"] = grid
+                    figprob = go.Figure()
+                    for i in range(1, probs.shape[1] + 1):
+                        col = f"class_{i}"
+                        figprob.add_trace(go.Scatter(x=prob_df["x"], y=prob_df[col], mode="lines", name=f"Pr(y={i})"))
+                    figprob.update_layout(title=f"Class Probabilities vs {feat}")
+                    st.plotly_chart(_crosshair(figprob), use_container_width=True)
 
-        with st.expander("Model summary"):
-            st.text(str(res.summary()))
-        st.info(f"McFadden pseudo-R²: {pseudo_r2:.3f}")
+            with st.expander("Model summary"):
+                st.text(str(res.summary()))
+            st.info(f"McFadden pseudo-R²: {pseudo_r2:.3f}" if np.isfinite(pseudo_r2) else "McFadden pseudo-R²: N/A")
 
-    except Exception as e:
-        st.warning(f"Ordered logit failed: {e}")
+        except Exception as e:
+            st.warning(f"Ordered logit failed: {e}")
 
 
 # ---- Regularization ----
@@ -521,7 +538,7 @@ with tabs[8]:
 
     # OLS prediction (extract first element, then cast)
     pred_series = mdl.predict(zdf.iloc[[int(idx)]])
-    ols_pred = float(pred_series.iloc[0])
+    ols_pred = float(mdl.predict(zdf.iloc[[int(idx)]]).iloc[0])
 
     # Agent V prediction
     av = agent_v_predict(row)
@@ -556,7 +573,7 @@ with tabs[10]:
         "statsmodels": sm.__version__,
         "pandas": pd.__version__,
         "numpy": np.__version__,
-        "plotly": px.__version__
+        "plotly": plotly.__version__
     }, sort_keys=True).encode()).hexdigest()[:12]
     audit_rec = {
         "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
