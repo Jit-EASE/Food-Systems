@@ -20,7 +20,7 @@ from statsmodels.stats.outliers_influence import OLSInfluence
 from statsmodels.stats.diagnostic import het_breuschpagan
 
 # ---------------------------- Config ----------------------------
-APP_VERSION = "streamlit-v4.1-boardroom-perf"
+APP_VERSION = "Agri-Food Sesnor - Econometric Suite v1"
 APP_KEY_PREFIX = "afs_v41_boardroom"
 FEATURES = [
     "dE","brix","salt_ppm","pH","spectral_centroid","peak_rate",
@@ -49,8 +49,8 @@ h1,h2,h3,h4 {font-family:"Segoe UI","Roboto",sans-serif;color:#e6edf3;border-bot
 # ---------------------------- Header ----------------------------
 st.markdown(f"""
 <div class="hero">
-  <div class="title">Sensor-Centric Econometric Suite for Agri-Food Systems</div>
-  <div class="sub">Panel econometrics with SPC & drift, uncertainty, trade-offs, ordered logit, regularization, and agent-assisted predictions — tuned for boardroom speed.</div>
+  <div class="title"> Food Sensor-Centric Econometric Suite for Agri-Food Systems</div>
+  <div class="sub">Panel econometrics with SPC & drift, uncertainty, trade-offs, ordered logit, regularization, and agent-assisted predictions</div>
   <div class="ver">Version: {APP_VERSION}</div>
 </div>
 """, unsafe_allow_html=True)
