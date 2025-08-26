@@ -501,13 +501,14 @@ with tabs[8]:
     idx = st.number_input("Row index (Agent)", min_value=0, max_value=len(zdf)-1, value=0)
     row = zdf.iloc[int(idx)]
 
-    # OLS prediction
-    ols_pred = float(mdl.predict(zdf.iloc[[int(idx)]]))[0]
+    # OLS prediction (safe single extraction)
+    pred_series = mdl.predict(zdf.iloc[[int(idx)]])
+    ols_pred = float(pred_series.iloc[0])
 
     # Agent V prediction
     av = agent_v_predict(row)
 
-    # Arbitration: simple ensemble (weight Agent V if closer to truth)
+    # Arbitration: weight Agent V if it’s closer to observed truth than OLS
     alpha = 0.25 if abs(av["y_v"] - row["overall_liking"]) < abs(ols_pred - row["overall_liking"]) else 0.0
     y_ens = (1 - alpha) * ols_pred + alpha * av["y_v"]
 
@@ -519,6 +520,7 @@ with tabs[8]:
     with col2:
         st.metric("Ensemble ŷ*", f"{y_ens:.2f}")
         st.write(f"QC status: {av['qc']}")
+
 
 # ---- Data ----
 with tabs[9]:
